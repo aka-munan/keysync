@@ -1,11 +1,11 @@
-package com.devoid.keysync.domain
+package com.devoid.keysync.domain.animators
 
 import android.animation.TypeEvaluator
 import android.animation.ValueAnimator
 import androidx.compose.ui.geometry.Offset
 import kotlin.math.atan
 
-class ObjectRandomAnimator :ValueAnimator() {
+class ObjectRandomAnimator : ValueAnimator() {
     fun init(p1: Offset, p2: Offset, randomness:Int=3, duration: Long=150) {
         val atanX = atan(p2.x-p1.x)
         val atanY= atan(p2.y - p1.y)

@@ -3,13 +3,19 @@ package com.devoid.keysync.service
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Resources
+import android.hardware.input.InputManager
 import android.os.Build
+import android.os.IBinder
+import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.core.view.WindowInsetsCompat
 import androidx.datastore.preferences.core.Preferences
+import com.devoid.keysync.IJniInputCallback
 import com.devoid.keysync.data.local.DataStoreManager
 import com.devoid.keysync.model.AppConfig
 import com.devoid.keysync.model.DraggableItem
@@ -32,9 +38,10 @@ class FloatingWindowStateManager @Inject constructor(
     private val dataStoreManager: DataStoreManager
 ) {
 
-    val scope = CoroutineScope(Dispatchers.Main +SupervisorJob())
+    val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private val shizukuSystemServerAPi = ShizukuSystemServerAPi()
+    private val shizukuSystemServerAPi =
+        ShizukuSystemServerAPi(context.getSystemService(Context.INPUT_SERVICE) as InputManager)
     private val eventHandler: EventHandler by lazy { shizukuSystemServerAPi.getEventHandler() }
     val windowManager: WindowManager by lazy { context.getSystemService(WindowManager::class.java) }
     private val displayMetrics = context.resources.displayMetrics
@@ -42,12 +49,12 @@ class FloatingWindowStateManager @Inject constructor(
     val pointerSensitivity = MutableStateFlow(0.5f)
     val overlayOpacity = MutableStateFlow(0.5f)
 
-    private var buttonConfigKey :Preferences.Key<String>? = null
+    private var buttonConfigKey: Preferences.Key<String>? = null
 
-    private val _appConfig =MutableStateFlow(AppConfig.Default)
+    private val _appConfig = MutableStateFlow(AppConfig.Default)
     val keysConfig = _appConfig.asStateFlow()
 
-    val sensitivity = (10f * pointerSensitivity.value)//at max 10x the original offset
+    val sensitivity = (10f * pointerSensitivity.value)//at max: 10x the original offset
 
     private val _isBubbleExpanded = MutableStateFlow(false)
     val isBubbleExpanded = _isBubbleExpanded.asStateFlow()
@@ -60,18 +67,46 @@ class FloatingWindowStateManager @Inject constructor(
     val containerItems = _containerItems.asStateFlow()
 
     val isShootingMode = eventHandler.shootingModeFlow
+    private val inputCallback: IJniInputCallback.Stub = object : IJniInputCallback.Stub() {
+        override fun onKeyDown(code: Int) {
+            if (_isBubbleExpanded.value)
+                return
+            val keyEvent = KeyEvent(
+                KeyEvent.ACTION_DOWN,
+                code,
+            )
+            eventHandler.handleKeyEvent(keyEvent)
+        }
+
+        override fun onKeyUp(code: Int) {//occupy keyboard so windowmanager dosent receive events
+            if (_isBubbleExpanded.value)
+                return
+            val keyEvent = KeyEvent(
+                KeyEvent.ACTION_UP,
+                code,
+            )
+            eventHandler.handleKeyEvent(keyEvent)
+        }
+
+    }
+
 
     init {
+        shizukuSystemServerAPi.startInputReaderService(inputCallback)
         scope.launch {
-            isBubbleExpanded.drop(1).collect{isExpanded->
+            isBubbleExpanded.drop(1).collect { isExpanded ->
                 if (isExpanded)
                     return@collect
                 buttonConfigKey?.let {
-                    dataStoreManager.save(DataStoreManager.OVERLAY_OPACITY,overlayOpacity.value)
-                    dataStoreManager.save(DataStoreManager.POINTER_SENSITIVITY,pointerSensitivity.value)
-                    dataStoreManager.save(it,containerItems.value)
+                    dataStoreManager.save(DataStoreManager.OVERLAY_OPACITY, overlayOpacity.value)
+                    dataStoreManager.save(
+                        DataStoreManager.POINTER_SENSITIVITY,
+                        pointerSensitivity.value
+                    )
+                    dataStoreManager.save(it, containerItems.value)
                 }
-                _appConfig.value = dataStoreManager.getKeyConfig(DataStoreManager.KEYS_CONFIG).first()
+                _appConfig.value =
+                    dataStoreManager.getKeyConfig(DataStoreManager.KEYS_CONFIG).first()
             }
         }
         scope.launch {
@@ -83,10 +118,10 @@ class FloatingWindowStateManager @Inject constructor(
 
     }
 
-    fun loadButtonsConfig(packageName:String){
-        buttonConfigKey= DataStoreManager.getButtonsConfigKey(packageName)
+    fun loadButtonsConfig(packageName: String) {
+        buttonConfigKey = DataStoreManager.getButtonsConfigKey(packageName)
         scope.launch {
-            _containerItems.value=dataStoreManager.getButtons(buttonConfigKey!!).first()
+            _containerItems.value = dataStoreManager.getButtons(buttonConfigKey!!).first()
             eventHandler.updateKeyMapping(containerItems.value)
             dataStoreManager.getFloat(DataStoreManager.OVERLAY_OPACITY).first()?.let {
                 overlayOpacity.value = it
@@ -99,7 +134,7 @@ class FloatingWindowStateManager @Inject constructor(
 
     fun addNewItem(itemType: DraggableItemType) {
         val itemID = containerItems.value.sumOf { it.id } + 1
-        val offset = Offset(0f,200f)
+        val offset = Offset(0f, 200f)
         val item = when (itemType) {
             DraggableItemType.KEY -> {
                 DraggableItem.VariableKey(itemID, position = offset, size = 0)
@@ -129,22 +164,25 @@ class FloatingWindowStateManager @Inject constructor(
                     keyCode = keysConfig.value.fireKeyCode
                 )
             }
-            DraggableItemType.BAG_MAP->{
+
+            DraggableItemType.BAG_MAP -> {
                 DraggableItem.CancelableKey(
                     itemID,
                     offset,
                     cancelPosition = offset,
                     size = 0,
                     type = itemType
-                )}
-            DraggableItemType.SCOPE->{
+                )
+            }
+
+            DraggableItemType.SCOPE -> {
                 DraggableItem.FixedKey(
                     itemID,
                     offset,
                     size = 0,
                     type = itemType,
                     keyCode = keysConfig.value.scopeKeyCode
-                    )
+                )
             }
         }
         _containerItems.value = containerItems.value.plus(item)
@@ -158,9 +196,14 @@ class FloatingWindowStateManager @Inject constructor(
         _isBubbleExpanded.value = !_isBubbleExpanded.value
         if (!_isBubbleExpanded.value) {
             eventHandler.updateKeyMapping(containerItems.value)
+            shizukuSystemServerAPi.grabActiveDevice()//grab device so that android system dosent receive events
         }
+        shizukuSystemServerAPi.releaseActiveDevice()//grab device so that android system  receive events
     }
 
+    @Deprecated(
+        "Deprecated, now uses native /dev/input/eventx instead",
+    )
     fun onKeyEvent(keyEvent: KeyEvent): Boolean {
         if (_isBubbleExpanded.value)
             return false
@@ -204,7 +247,7 @@ class FloatingWindowStateManager @Inject constructor(
         eventHandler.clear()
     }
 
-    fun onDestroy(){
+    fun onDestroy() {
         _isBubbleExpanded.value = false
         eventHandler.clear()
     }

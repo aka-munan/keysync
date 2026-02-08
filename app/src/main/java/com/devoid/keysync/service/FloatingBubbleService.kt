@@ -263,9 +263,10 @@ class FloatingBubbleService : Service() {
                 stateManager.get().onMouseEvent(motionEvent)
             }
         }
-        composeView.setOnKeyListener { _, _, event ->
-            stateManager.get().onKeyEvent(event)
-        }
+        /*shifted to native InputReader*/
+//        composeView.setOnKeyListener { _, _, event ->
+//            stateManager.get().onKeyEvent(event)
+//        }
         return composeView
     }
 

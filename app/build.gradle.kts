@@ -29,8 +29,8 @@ android {
         applicationId = "com.devoid.keysync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.4-beta"
+        versionCode = 5
+        versionName = "2.01-SNAPSHOT"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -54,7 +54,16 @@ android {
         jvmTarget = "11"
     }
     buildFeatures {
+        buildConfig = true
         compose = true
+        aidl = true
+    }
+    ndkVersion = "29.0.14206865"
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 }
 

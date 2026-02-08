@@ -5,73 +5,107 @@ import android.view.MotionEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.core.animation.doOnEnd
 import androidx.core.animation.doOnStart
+import com.devoid.keysync.domain.animators.CoroutineValueAnimator
+import com.devoid.keysync.domain.animators.ObjectRandomAnimator
 import com.devoid.keysync.model.EventInjector
 import com.devoid.keysync.model.EventManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-abstract class EventInjectorImpl(private val eventManager: EventManager = EventManagerImpl()) :
+abstract class EventInjectorWithRandImpl(private val eventManager: EventManager = EventManagerImpl()) :
     EventInjector {
     private val animators = mutableMapOf<Int, ObjectRandomAnimator>()
+    private val animatorJobs = mutableMapOf<Int, Job>()
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private val taskQueue = Channel<suspend ()->Unit>()
+    private val taskQueue = Channel<suspend () -> Unit>()
     abstract fun inject(event: InputEvent)
 
     init {
         scope.launch {
-            for (task in taskQueue){
+            for (task in taskQueue) {
                 task.invoke()
             }
         }
     }
+
     override fun injectGesture(pointerID: Int, o1: Offset, o2: Offset) {
 
-        animators[pointerID]?.let {
+//        animators[pointerID]?.let {
+//            it.cancel()
+//            animators.remove(pointerID)
+//        }
+        animatorJobs[pointerID]?.let {
             it.cancel()
-            animators.remove(pointerID)
+            animatorJobs.remove(pointerID)
         }
-        val animator = ObjectRandomAnimator()
-        animator.init(o1, o2, duration = 80)
-        animator.addUpdateListener { animation ->
-            val offset = animation.animatedValue as Offset
-            scope.launch {
-                taskQueue.send {
-                    if (!animator.isRunning)
-                        return@send
-                    eventManager.updatePointer(pointerID, offset.x, offset.y)
-                    val event = eventManager.createMotionEvent(MotionEvent.ACTION_MOVE)
-                    event?.let {
-                        inject(it)
-                        it.recycle()
+//        val animator = ObjectRandomAnimator()
+        val animatorJob = scope.launch {
+            CoroutineValueAnimator.animateOffsetFrame(
+                o1, o2, durationMs = 80,
+                onStart = {
+                    if (!injected(pointerID)) {
+                        addEventDown(pointerID, o1.x, o1.y)
                     }
-                }
-            }
+                }, onUpdate = {offset->
+                    taskQueue.send {
+                        if (!isActive)
+                            return@send
+                        eventManager.updatePointer(pointerID, offset.x, offset.y)
+                        val event = eventManager.createMotionEvent(MotionEvent.ACTION_MOVE)
+                        event?.let {
+                            inject(it)
+                            it.recycle()
+                        }
+                    }
+                },
+                onEnd = {
+                    animators.remove(pointerID)
+                })
         }
-        animator.doOnEnd {
-            animators.remove(pointerID)
-        }
-        animator.doOnStart {//inject action down once at $o1 if not injected
-            scope.launch {
-                if (!injected(pointerID)) {
-                    addEventDown(pointerID, o1.x, o1.y)
-                }
-            }
-        }
-        animator.start()
-        animators[pointerID] = animator
+//        animator.init(o1, o2, duration = 80)
+//        animator.addUpdateListener { animation ->
+//            val offset = animation.animatedValue as Offset
+//            scope.launch {
+//                taskQueue.send {
+//                    if (!animator.isRunning)
+//                        return@send
+//                    eventManager.updatePointer(pointerID, offset.x, offset.y)
+//                    val event = eventManager.createMotionEvent(MotionEvent.ACTION_MOVE)
+//                    event?.let {
+//                        inject(it)
+//                        it.recycle()
+//                    }
+//                }
+//            }
+//        }
+//        animator.doOnEnd {
+//            animators.remove(pointerID)
+//        }
+//        animator.doOnStart {//inject action down once at $o1 if not injected
+//            scope.launch {
+//                if (!injected(pointerID)) {
+//                    addEventDown(pointerID, o1.x, o1.y)
+//                }
+//            }
+//        }
+//        animator.start()
+//        animators[pointerID] = animator
+        animatorJobs[pointerID] = animatorJob
     }
 
     override fun transFormGesture(pointerID: Int, position: Offset) {
         scope.launch {
             taskQueue.send {
                 eventManager.getPointerLocation(pointerID)?.let {
-                    withContext(Dispatchers.Main){
-                        injectGesture(pointerID,it,position)
+                    withContext(Dispatchers.Main) {
+                        injectGesture(pointerID, it, position)
                     }
                 }
             }

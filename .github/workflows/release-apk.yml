@@ -2,7 +2,7 @@ name: Android Release APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ feature/native ]
   workflow_dispatch:
 
 permissions:
@@ -98,7 +98,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.build.outputs.version_name }}
-          name: Release v${{ needs.build.outputs.version_name }}
-          files: app-release.apk
+          name: SNAPSHOT Build v${{ needs.build.outputs.version_name }}
+          prerelease: true
+          body: |
+            ⚠️ Experimental Snapshot Build
+            
+            This build is generated from the `feature/native-input-reader` branch.
+            It includes early native input handling changes and is intended for testing only.
+            
+            Expect bugs, incomplete features, and possible regressions.
+          files: SNAPSHOT_v${{ needs.build.outputs.version_name }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

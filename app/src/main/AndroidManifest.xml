@@ -5,25 +5,27 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
+
     <application
+        android:name=".KeySyncApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:name=".KeySyncApplication"
         android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.KeySync.Splash"
         tools:targetApi="31">
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="com.devoid.keysync.shizuku"
-            android:multiprocess="false"
             android:enabled="true"
             android:exported="true"
+            android:multiprocess="false"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <activity
@@ -40,6 +42,7 @@
             android:name=".service.FloatingBubbleService"
             android:exported="false"
             android:foregroundServiceType="specialUse" />
+
     </application>
 
 </manifest>
