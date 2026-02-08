@@ -107,6 +107,6 @@ jobs:
             It includes early native input handling changes and is intended for testing only.
             
             Expect bugs, incomplete features, and possible regressions.
-          files: SNAPSHOT_v${{ needs.build.outputs.version_name }}.apk
+          files: app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
