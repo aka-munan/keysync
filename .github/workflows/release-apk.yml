@@ -103,7 +103,7 @@ jobs:
           body: |
             ⚠️ Experimental Snapshot Build
             
-            This build is generated from the `feature/native-input-reader` branch.
+            This build is generated from the `feature/native` branch.
             It includes early native input handling changes and is intended for testing only.
             
             Expect bugs, incomplete features, and possible regressions.
